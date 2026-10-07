@@ -11,7 +11,19 @@ import logging
 import os
 import re
 from pathlib import Path
+from threading import Thread
+from flask import Flask
 
+app = Flask(__name__)
+@app.route('/')
+def health_check():
+    return "AeroHalo Bot is Live!", 200
+
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+Thread(target=run_http_server, daemon=True).start()
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import (
     Application,
