@@ -187,7 +187,7 @@ import asyncio
 async def poll_watchers_async(app: Application):
     while True:
         try:
-            watchers = STORE.get_all_watchers()
+            watchers = list(STORE.active_watchers())
             for w in watchers:
                 contacts = await scan_halo(w.lat, w.lon)
                 current = {c.hex for c in contacts}
