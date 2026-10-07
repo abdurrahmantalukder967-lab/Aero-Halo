@@ -182,27 +182,30 @@ async def _arm(update: Update, lat: float, lon: float, label: str) -> None:
         await update.message.reply_text("Live feed is busy. Alerts will retry on the next scan.")
 
 
-async def poll_watchers(context: ContextTypes.DEFAULT_TYPE) -> None:
-    watchers = list(STORE.active_watchers())
-    if not watchers:
-        return
-    for w in watchers:
-        try:
-            contacts = await scan_halo(w.lat, w.lon)
-        except Exception:
-            log.exception("scan failed for %s", w.chat_id)
-            continue
-        current = {c.hex for c in contacts}
-        fresh = [c for c in contacts if c.hex not in w.seen_hexes]
-        STORE.save_seen(w.chat_id, current)
-        for contact in fresh:
-            try:
-                await context.bot.send_message(w.chat_id, format_alert(contact))
-            except Exception:
-                log.exception("send failed for %s", w.chat_id)
-
-
 import asyncio
+
+async def poll_watchers_async(app: Application):
+    while True:
+        try:
+            watchers = STORE.get_all_watchers()
+            for w in watchers:
+                contacts = await scan_halo(w.lat, w.lon)
+                current = {c.hex for c in contacts}
+                fresh = [c for c in contacts if c.hex not in w.seen_hexes]
+                STORE.save_seen(w.chat_id, current)
+                for contact in fresh:
+                    try:
+                        await app.bot.send_message(
+                            w.chat_id, 
+                            format_alert(contact), 
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        log.exception("Send failed for %s: %s", w.chat_id, e)
+        except Exception as e:
+            log.exception("Error in background watcher poll: %s", e)
+            
+        await asyncio.sleep(30)
 
 async def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -211,7 +214,6 @@ async def main() -> None:
         
     app = Application.builder().token(token).build()
     
-    # Correct function names matching your codebase
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("status", cmd_status))
@@ -226,9 +228,8 @@ async def main() -> None:
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
         
-        # Background polling task setup
-        loop = asyncio.get_running_loop()
-        loop.create_task(asyncio.to_thread(poll_watchers, app))
+        # Start Flightradar24 polling task
+        asyncio.create_task(poll_watchers_async(app))
         
         await asyncio.Event().wait()
 
