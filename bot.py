@@ -192,31 +192,31 @@ async def poll_watchers(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 import asyncio
 
-async def main():
-    
-    _load_env()
-    
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+async def main() -> None:
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
-        raise RuntimeError("Set TELEGRAM_BOT_TOKEN in .env or environment variables")
-
-    store = Store()
+        raise SystemExit("Set TELEGRAM_BOT_TOKEN in .env")
+        
     app = Application.builder().token(token).build()
-
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("set", set_cmd))
-    app.add_handler(CommandHandler("status", status_cmd))
-    app.add_handler(MessageHandler(filters.LOCATION, location_msg))
-
-    loop = asyncio.get_running_loop()
-    loop.create_task(scan_halo(app, store))
-
-    print("Starting AeroHalo bot...")
     
+    # Correct function names matching your codebase
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("pause", cmd_pause))
+    app.add_handler(CommandHandler("resume", cmd_resume))
+    app.add_handler(CommandHandler("set", cmd_set))
+    app.add_handler(MessageHandler(filters.LOCATION, on_location))
+    
+    log.info("AeroHalo bot starting...")
     
     async with app:
         await app.start()
-        await app.updater.start_polling()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        # Background polling task setup
+        loop = asyncio.get_running_loop()
+        loop.create_task(asyncio.to_thread(poll_watchers, app))
         
         await asyncio.Event().wait()
 
