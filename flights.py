@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any
 import httpx
 
 HALO_KM = 90.0
@@ -47,7 +46,6 @@ def _bbox(lat: float, lon: float, km: float) -> dict[str, float]:
 
 async def scan_halo(lat: float, lon: float, radius_km: float = HALO_KM) -> list[Contact]:
     bbox = _bbox(lat, lon, radius_km)
-    # Flightradar24 public API bounding box format: max_lat, min_lat, min_lon, max_lon
     bounds = f"{bbox['lamax']:.2f},{bbox['lamin']:.2f},{bbox['lomin']:.2f},{bbox['lomax']:.2f}"
     url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={bounds}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&type=json"
 
@@ -66,7 +64,6 @@ async def scan_halo(lat: float, lon: float, radius_km: float = HALO_KM) -> list[
             return []
 
     for flight_id, details in data.items():
-        # Skip metadata keys in FR24 response
         if not isinstance(details, list) or len(details) < 18:
             continue
 
@@ -108,7 +105,7 @@ async def scan_halo(lat: float, lon: float, radius_km: float = HALO_KM) -> list[
 
 def format_alert(c: Contact) -> str:
     return (
-        f"🛩️⭕ **Aircraft Found!**\n"
+        f"🛩️🟢 **Aircraft Found!**\n"
         f"• **Callsign:** `{c.callsign}`\n"
         f"• **Type:** `{c.type_code}` ({c.registration})\n"
         f"• **Altitude:** `{c.altitude_ft} ft`\n"
@@ -116,8 +113,3 @@ def format_alert(c: Contact) -> str:
         f"• **Distance:** `{c.distance_km} km` away\n"
         f"• **Route:** {c.route}"
     )
-
-Primary feed: ADS-B aggregators (adsb.fi). Fallback: OpenSky Network.
-Airline + route enrichment: ADSBdb (no API key).
-"""
-
