@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -257,6 +258,44 @@ async def poll_watchers(context: ContextTypes.DEFAULT_TYPE) -> None:
             _BOOT_SENT.add(w.chat_id)
 
 
+def _ensure_event_loop() -> None:
+    """Python 3.14 no longer creates a loop for the main thread. PTB 21 crashes without one."""
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+def _health_server() -> None:
+    """Render web services kill the process unless something listens on $PORT."""
+    raw = os.environ.get("PORT", "").strip()
+    if not raw:
+        return
+    try:
+        port = int(raw)
+    except ValueError:
+        return
+    if port <= 0:
+        return
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=server.serve_forever, name="health", daemon=True).start()
+    log.info("health server listening on %s", port)
+
+
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
@@ -274,8 +313,10 @@ def main() -> None:
     if job is None:
         raise SystemExit("Job queue extra is missing. Install python-telegram-bot[job-queue].")
     job.run_repeating(poll_watchers, interval=POLL_SECONDS, first=15)
+    _ensure_event_loop()
+    _health_server()
     log.info("AeroHalo bot starting")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
 
 
 if __name__ == "__main__":
