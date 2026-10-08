@@ -12,7 +12,10 @@ Multi-user Telegram bot that watches **airborne aircraft within 90 km** of each 
 
 Every Telegram account has its own saved location. One running process serves all users.
 
-Live positions come from [adsb.fi](https://opendata.adsb.fi) (OpenSky Network as fallback). Airline and route lookup uses [ADSBdb](https://www.adsbdb.com) — no paid API key.
+Live positions come from Flightradar24 first.
+
+- **No key:** the public Flightradar24 map feed. Already the default. No signup.
+- **Official API:** set `FR24_API_TOKEN` from [fr24api.flightradar24.com](https://fr24api.flightradar24.com). That endpoint is paid — each returned aircraft spends credits, and the bot scans about every 45 seconds, so a busy halo can use a lot of credits. If the token is missing or the call fails, the bot falls back to the free map feed, then adsb.fi and adsb.lol.
 
 ## Commands
 
@@ -21,6 +24,7 @@ Live positions come from [adsb.fi](https://opendata.adsb.fi) (OpenSky Network as
 | `/start` | Welcome + location keyboard |
 | Share location | Telegram location pin (recommended) |
 | `/set 23.8103 90.4125` | Set latitude / longitude by hand |
+| `/now` | Send every aircraft inside 90 km right now |
 | `/status` | Show watch state |
 | `/pause` | Stop alerts for you |
 | `/resume` | Resume alerts |
@@ -42,7 +46,9 @@ Speed       490 kt
 Heading     097°
 ```
 
-A contact is only alerted when it **enters** your halo. Aircraft already inside when you set the location are recorded silently so you are not spammed.
+Setting a location sends **one Telegram message per aircraft** already inside 90 km. Later scans message only aircraft that newly enter. Send `/now` any time to get the full list again.
+
+Route lookup never blocks the alert. If the route service is slow, the message still goes out with airline, aircraft, altitude and speed.
 
 ## Setup
 
@@ -75,7 +81,7 @@ Leave the process running. Users can `/start` and share a location immediately.
 ### Keep it online
 
 - A cheap VPS (Ubuntu): `tmux` / `systemd` running `python bot.py`
-- [Railway](https://railway.app), [Render](https://render.com) or any always-on Python worker — set `TELEGRAM_BOT_TOKEN` as an environment variable
+- [Render](https://render.com): Background Worker, start command `python bot.py`, env `TELEGRAM_BOT_TOKEN`. If you only have a free Web Service, the process also listens on `$PORT` so the deploy health check can pass. Free web services still sleep when nobody opens the service URL, which stops Telegram polling. A worker (or a paid always-on instance) is the one that keeps alerts coming.
 - Do **not** use a serverless function (Vercel / AWS Lambda). The bot long-polls Telegram and scans every 60 seconds.
 
 Example systemd unit:
