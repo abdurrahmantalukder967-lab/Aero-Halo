@@ -88,4 +88,4 @@ class Store:
             label=str(row["label"] or ""),
             active=bool(row["active"]),
             seen_hexes=seen,
-                )
+        )
