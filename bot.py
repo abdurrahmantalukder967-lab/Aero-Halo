@@ -7,23 +7,13 @@ user's 90 km halo.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
+import time
 from pathlib import Path
-from threading import Thread
-from flask import Flask
 
-app = Flask(__name__)
-@app.route('/')
-def health_check():
-    return "AeroHalo Bot is Live!", 200
-
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-Thread(target=run_http_server, daemon=True).start()
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -33,7 +23,7 @@ from telegram.ext import (
     filters,
 )
 
-from flights import HALO_KM, format_alert, scan_halo
+from flights import HALO_KM, Contact, format_alert, scan_halo
 from store import Store
 
 
@@ -52,18 +42,25 @@ def _load_env() -> None:
 _load_env()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("aerohalo")
 
 STORE = Store()
 COORD_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)")
-POLL_SECONDS = 60
+POLL_SECONDS = 45
+MAX_ALERTS = 15
+_LOCKS: dict[int, asyncio.Lock] = {}
+_FAIL_NOTICE: dict[int, float] = {}
+_BOOT_SENT: set[int] = set()
 
 
 def _keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("Share location", request_location=True)],
-            [KeyboardButton("/status"), KeyboardButton("/pause")],
+            [KeyboardButton("/now"), KeyboardButton("/status")],
+            [KeyboardButton("/pause"), KeyboardButton("/resume")],
         ],
         resize_keyboard=True,
     )
@@ -76,11 +73,12 @@ HELP = (
     "/help — this message\n"
     "Share location — tap the button (best) or send a map pin\n"
     "/set 23.8103 90.4125 — set coordinates manually\n"
+    "/now — send every aircraft inside 90 km right now\n"
     "/status — current watch\n"
     "/pause — stop alerts\n"
     "/resume — start alerts again\n\n"
-    "Every user has their own location. Alerts are English-only and include "
-    "airline, aircraft, route, altitude and speed."
+    "Setting a location sends one message per aircraft already inside the halo. "
+    "After that, only new aircraft are messaged. /now repeats the full list."
 )
 
 
@@ -125,6 +123,81 @@ async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Alerts paused. /resume to continue.")
 
 
+def _lock(chat_id: int) -> asyncio.Lock:
+    if chat_id not in _LOCKS:
+        _LOCKS[chat_id] = asyncio.Lock()
+    return _LOCKS[chat_id]
+
+
+async def _send_contacts(bot, chat_id: int, contacts: list[Contact], *, force: bool) -> set[str]:
+    watcher = STORE.get(chat_id)
+    seen = set(watcher.seen_hexes) if watcher else set()
+    targets = contacts if force else [c for c in contacts if c.hex not in seen]
+    sent = set(seen)
+    if not contacts:
+        if force:
+            await bot.send_message(
+                chat_id,
+                "Scan finished. No airborne aircraft inside 90 km right now. I will message you when one enters.",
+            )
+            log.info("empty scan chat=%s", chat_id)
+        return sent
+    if not targets:
+        log.info("no new aircraft chat=%s tracked=%s", chat_id, len(contacts))
+        return sent
+    batch = targets[:MAX_ALERTS]
+    for contact in batch:
+        try:
+            await bot.send_message(chat_id, format_alert(contact, entered=not force))
+            sent.add(contact.hex)
+            log.info("alert sent chat=%s flight=%s", chat_id, contact.callsign)
+        except Exception:
+            log.exception("send failed chat=%s flight=%s", chat_id, contact.callsign)
+    extra = len(targets) - len(batch)
+    if extra > 0:
+        await bot.send_message(chat_id, f"{extra} more aircraft are inside 90 km. Send /now to list them.")
+    return sent
+
+
+async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool) -> bool:
+    async with _lock(chat_id):
+        try:
+            contacts = await scan_halo(lat, lon)
+        except Exception:
+            log.exception("scan failed chat=%s", chat_id)
+            now = time.time()
+            if now - _FAIL_NOTICE.get(chat_id, 0) > 900:
+                _FAIL_NOTICE[chat_id] = now
+                try:
+                    await bot.send_message(chat_id, "Live feed failed. I will retry in under a minute.")
+                except Exception:
+                    log.exception("fail notice not sent chat=%s", chat_id)
+            return False
+        log.info("scan chat=%s aircraft=%s force=%s", chat_id, len(contacts), force)
+        sent = await _send_contacts(bot, chat_id, contacts, force=force)
+        STORE.save_seen(chat_id, sent)
+        return True
+
+
+async def cmd_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_chat or not update.message:
+        return
+    watcher = STORE.get(update.effective_chat.id)
+    if not watcher:
+        await update.message.reply_text("Set a location first. Share your location or /set LAT LON.")
+        return
+    if not watcher.active:
+        STORE.set_active(update.effective_chat.id, True)
+    await update.message.reply_text("Scanning 90 km around you...")
+    await _scan_and_alert(
+        context.bot,
+        update.effective_chat.id,
+        watcher.lat,
+        watcher.lon,
+        force=True,
+    )
+
+
 async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_chat or not update.message:
         return
@@ -133,7 +206,8 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Set a location first.")
         return
     STORE.set_active(update.effective_chat.id, True)
-    await update.message.reply_text("Watch resumed.")
+    await update.message.reply_text("Watch resumed. Scanning now...")
+    await _scan_and_alert(context.bot, update.effective_chat.id, w.lat, w.lon, force=True)
 
 
 async def cmd_set(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -148,93 +222,61 @@ async def cmd_set(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         await update.message.reply_text("Coordinates out of range.")
         return
-    await _arm(update, lat, lon, f"{lat:.4f}, {lon:.4f}")
+    await _arm(update, context, lat, lon, f"{lat:.4f}, {lon:.4f}")
 
 
 async def on_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.location:
         return
     loc = update.message.location
-    await _arm(update, loc.latitude, loc.longitude, "Shared location")
+    await _arm(update, context, loc.latitude, loc.longitude, "Shared location")
 
 
-async def _arm(update: Update, lat: float, lon: float, label: str) -> None:
+async def _arm(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lon: float, label: str) -> None:
     if not update.effective_chat or not update.message:
         return
     STORE.upsert_location(update.effective_chat.id, lat, lon, label)
     await update.message.reply_text(
         f"Watch set.\n{label}\n{lat:.5f}, {lon:.5f}\nHalo {int(HALO_KM)} km.\n"
-        "You will be alerted when a new aircraft enters the halo.",
+        "Scanning now. You will get one message per aircraft.",
         reply_markup=_keyboard(),
     )
-    try:
-        contacts = await scan_halo(lat, lon)
-        STORE.save_seen(update.effective_chat.id, {c.hex for c in contacts})
-        if contacts:
-            lines = [f"{c.callsign}  {c.airline}  {int(round(c.distance_km))} km" for c in contacts[:8]]
-            await update.message.reply_text(
-                f"{len(contacts)} airborne now.\n" + "\n".join(lines)
-            )
-        else:
-            await update.message.reply_text("No airborne contacts inside 90 km right now.")
-    except Exception:
-        log.exception("initial scan failed")
-        await update.message.reply_text("Live feed is busy. Alerts will retry on the next scan.")
+    await _scan_and_alert(context.bot, update.effective_chat.id, lat, lon, force=True)
 
 
-import asyncio
+async def poll_watchers(context: ContextTypes.DEFAULT_TYPE) -> None:
+    watchers = list(STORE.active_watchers())
+    if not watchers:
+        log.info("poll: no active watchers")
+        return
+    for w in watchers:
+        log.info("poll chat=%s lat=%s lon=%s", w.chat_id, w.lat, w.lon)
+        first = w.chat_id not in _BOOT_SENT
+        ok = await _scan_and_alert(context.bot, w.chat_id, w.lat, w.lon, force=first)
+        if ok:
+            _BOOT_SENT.add(w.chat_id)
 
-async def poll_watchers_async(app: Application):
-    while True:
-        try:
-            watchers = list(STORE.active_watchers())
-            for w in watchers:
-                contacts = await scan_halo(w.lat, w.lon)
-                current = {c.hex for c in contacts}
-                fresh = [c for c in contacts if c.hex not in w.seen_hexes]
-                STORE.save_seen(w.chat_id, current)
-                for contact in fresh:
-                    try:
-                        await app.bot.send_message(
-                            w.chat_id, 
-                            format_alert(contact), 
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        log.exception("Send failed for %s: %s", w.chat_id, e)
-        except Exception as e:
-            log.exception("Error in background watcher poll: %s", e)
-            
-        await asyncio.sleep(30)
 
-async def main() -> None:
+def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise SystemExit("Set TELEGRAM_BOT_TOKEN in .env")
-        
     app = Application.builder().token(token).build()
-    
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("pause", cmd_pause))
     app.add_handler(CommandHandler("resume", cmd_resume))
+    app.add_handler(CommandHandler("now", cmd_now))
     app.add_handler(CommandHandler("set", cmd_set))
     app.add_handler(MessageHandler(filters.LOCATION, on_location))
-    
-    log.info("AeroHalo bot starting...")
-    
-    async with app:
-        await app.start()
-        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        
-        # Start Flightradar24 polling task
-        asyncio.create_task(poll_watchers_async(app))
-        
-        await asyncio.Event().wait()
+    job = app.job_queue
+    if job is None:
+        raise SystemExit("Job queue extra is missing. Install python-telegram-bot[job-queue].")
+    job.run_repeating(poll_watchers, interval=POLL_SECONDS, first=15)
+    log.info("AeroHalo bot starting")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    main()
