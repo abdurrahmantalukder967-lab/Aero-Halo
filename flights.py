@@ -680,17 +680,33 @@ async def scan_global_bbox(
     # যদি Flightradar24 ডাটা দিতে ব্যর্থ হয়, তবে ব্যাকআপ OpenSky Network কাজ করবে
     if not contacts:
         opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
+                # ১. প্রথমে Flightradar24 স্ক্যান
+    try:
+        async with httpx.AsyncClient(timeout=8.0, headers=headers) as client:
+            resp = await client.get(fr24_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"FR24 Raw Contacts Count: {len(data)}")  # <--- প্রিন্ট লাইনটি এখানে থাকবে
+                for key, val in data.items():
+                    if isinstance(val, list) and len(val) >= 18:
+                        contacts.append(...)
+    except Exception as e:
+        print(f"FR24 fetch error: {e}")
+
+    # ২. এরপর যদি কোনো কন্ট্যাক্ট না পাওয়া যায়, তবে OpenSky ব্যাকআপ
+    if not contacts:
+        opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(opensky_url)
                 if resp.status_code == 200:
-                async with httpx.AsyncClient(timeout=8.0, headers=headers) as client:
-                resp = await client.get(fr24_url)
-                if resp.status_code == 200:
-                data = resp.json()
-                print(f"FR24 Raw Contacts Count: {len(data)}")  # <--- এই লাইনটি যোগ করুন
-                for key, val in data.items():
-                if isinstance(val, list) and len(val) >= 18:
+                    data = resp.json()
+                    states = data.get("states") or []
+                    for s in states:
+                        ...
+        except Exception as e:
+            print(f"OpenSky fetch error: {e}")
+
                         ...
                     data = resp.json()
                     states = data.get("states") or []
