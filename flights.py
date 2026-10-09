@@ -627,7 +627,6 @@ async def _enrich_routes(client: httpx.AsyncClient, contacts: list[Contact]) -> 
         return
 
 async def scan_global_bbox(
-async def scan_global_bbox(
     min_lat: float = 20.0, 
     max_lat: float = 27.0, 
     min_lon: float = 88.0, 
