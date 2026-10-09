@@ -627,23 +627,24 @@ async def _enrich_routes(client: httpx.AsyncClient, contacts: list[Contact]) -> 
         return
 
 async def scan_global_bbox(
+async def scan_global_bbox(
     min_lat: float = 20.0, 
     max_lat: float = 27.0, 
     min_lon: float = 88.0, 
     max_lon: float = 93.0
 ) -> list[Contact]:
-    """
-    পুরো অঞ্চলের সব প্লেন মাত্র ১টি API কলে নিয়ে আসবে।
-    """
+    # Flightradar24 এর জন্য সঠিক ফরম্যাট: max_lat,min_lat,min_lon,max_lon
     bounds = f"{max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}"
     url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={bounds}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&type=json"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9"
     }
 
     contacts = []
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         try:
             resp = await client.get(url, headers=headers)
             if resp.status_code != 200:
@@ -699,6 +700,7 @@ async def scan_global_bbox(
         contacts.append(c)
 
     return contacts
+
 
 async def scan_halo(lat: float, lon: float) -> list[Contact]:
     async with httpx.AsyncClient(follow_redirects=True) as client:
