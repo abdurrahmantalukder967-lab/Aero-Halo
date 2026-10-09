@@ -163,11 +163,10 @@ async def _send_contacts(bot, chat_id: int, contacts: list[Contact], *, force: b
 async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool = False) -> bool:
     async with _lock(chat_id):
         try:
-
-
-
-
-all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+            
+            
+            
+            all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
             contacts = []
             
             for ac in all_aircraft:
