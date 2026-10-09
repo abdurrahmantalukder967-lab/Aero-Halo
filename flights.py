@@ -744,51 +744,6 @@ async def scan_global_bbox(
     contacts = []
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         try:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code != 200:
-                return []
-            data = resp.json()
-        except Exception:
-            return []
-
-    for key, row in data.items():
-        if key in ("full_count", "version", "stats") or not isinstance(row, list) or len(row) < 18:
-            continue
-
-        ac_lat, ac_lon = row[1], row[2]
-        if not isinstance(ac_lat, (int, float)) or not isinstance(ac_lon, (int, float)):
-            continue
-
-        on_ground = row[14] if len(row) > 14 else 0
-        if on_ground in (1, True, "1"):
-            continue
-
-        alt = row[4] if isinstance(row[4], (int, float)) else 0.0
-        if alt < 100:
-            continue
-
-        type_code = str(row[8]).strip().upper() if len(row) > 8 and row[8] else "N/A"
-        reg = str(row[9]).strip() if len(row) > 9 and row[9] else "N/A"
-        origin = str(row[11]).strip() if len(row) > 11 and row[11] else ""
-async def scan_global_bbox(
-    min_lat: float = 20.0, 
-    max_lat: float = 27.0, 
-    min_lon: float = 88.0, 
-    max_lon: float = 93.0
-) -> list[Contact]:
-    contacts = []
-    
-    # ১. প্রথমে Flightradar24 ট্রাই করবে
-    fr24_bounds = f"{max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}"
-    fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={fr24_bounds}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&type=json"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.flightradar24.com/"
-    }
-
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-        try:
 
 async def scan_global_bbox(
     min_lat: float = 20.0, 
