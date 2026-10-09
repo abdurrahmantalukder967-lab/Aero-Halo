@@ -129,3 +129,19 @@ async def scan_global_bbox(
             print(f"OpenSky fetch error: {e}")
 
     return contacts
+def format_alert(contact: Contact, entered: bool = True) -> str:
+    status = "entered" if entered else "is inside"
+    airline_name = AIRLINES.get(contact.callsign[:3], "")
+    callsign_str = f" ({contact.callsign})" if contact.callsign != "N/A" else ""
+    airline_str = f"\nAirline: {airline_name}" if airline_name else ""
+    
+    return (
+        f"✈️ **Aircraft Alert!**\n"
+        f"An aircraft {status} your 90 km halo.\n\n"
+        f"• **Callsign**: {contact.callsign}\n"
+        f"• **Distance**: {contact.distance_km} km\n"
+        f"• **Altitude**: {contact.altitude_ft} ft\n"
+        f"• **Speed**: {contact.speed_kts} kts\n"
+        f"• **Heading**: {contact.heading}°"
+        f"{airline_str}"
+    )
