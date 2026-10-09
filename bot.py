@@ -315,7 +315,21 @@ def _health_server() -> None:
     threading.Thread(target=server.serve_forever, name="health", daemon=True).start()
     log.info("health server listening on %s", port)
 
-
+async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.text:
+        return
+    text = update.message.text.strip()
+    match = COORD_RE.match(text)
+    if not match:
+        return
+    chat_id = update.effective_chat.id
+    lat, lon = float(match.group(1)), float(match.group(2))
+    STORE.set_watcher(chat_id, lat, lon, label=f"Pinned ({lat:.4f}, {lon:.4f})")
+    await update.message.reply_text(
+        f"Watch set.\nPinned location {lat:.5f}, {lon:.5f}\nHalo {int(HALO_KM)} km.\nScanning now...",
+        reply_markup=_keyboard(),
+    )
+    await _scan_and_alert(context.bot, chat_id, lat, lon, force=False)
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
