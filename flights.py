@@ -676,7 +676,7 @@ async def scan_global_bbox(
 
     # যদি Flightradar24 ডাটা দিতে ব্যর্থ হয়, তবে ব্যাকআপ OpenSky Network কাজ করবে
     if not contacts:
-        opensky_url = "f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
+        opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(opensky_url)
