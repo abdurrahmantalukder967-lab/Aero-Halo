@@ -626,7 +626,6 @@ async def _enrich_routes(client: httpx.AsyncClient, contacts: list[Contact]) -> 
     except TimeoutError:
         return
 
-
 import httpx
 from dataclasses import dataclass
 
@@ -647,46 +646,65 @@ async def scan_global_bbox(
     min_lon: float = 88.0,
     max_lon: float = 93.0
 ) -> list[Contact]:
-    # Flightradar24 API URL
-    url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat},{min_lat},{min_lon},{max_lon}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=0&estimated=1&maxage=14400&gliders=0"
+    contacts = []
     
+    # ১. প্রথম চেষ্টা: Flightradar24
+    fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat},{min_lat},{min_lon},{max_lon}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=0&estimated=1&maxage=14400&gliders=0"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    contacts = []
     try:
-        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
-            resp = await client.get(url)
+        async with httpx.AsyncClient(timeout=8.0, headers=headers) as client:
+            resp = await client.get(fr24_url)
             if resp.status_code == 200:
                 data = resp.json()
                 for key, val in data.items():
-                    # সিস্টেম তথ্য বাদে শুধু প্লেনের ডাটা প্রসেস করবে
                     if isinstance(val, list) and len(val) >= 18:
-                        hex_code = str(key)
-                        lat = float(val[1])
-                        lon = float(val[2])
-                        heading = int(val[3]) if val[3] is not None else 0
-                        alt = int(val[4]) if val[4] is not None else 0
-                        speed = int(val[5]) if val[5] is not None else 0
-                        callsign = str(val[16]).strip() if val[16] else "N/A"
-
                         contacts.append(
                             Contact(
-                                hex=hex_code,
-                                callsign=callsign,
-                                lat=lat,
-                                lon=lon,
-                                altitude_ft=alt,
-                                speed_kts=speed,
-                                heading=heading,
+                                hex=str(key),
+                                callsign=str(val[16]).strip() if val[16] else "N/A",
+                                lat=float(val[1]),
+                                lon=float(val[2]),
+                                altitude_ft=int(val[4]) if val[4] is not None else 0,
+                                speed_kts=int(val[5]) if val[5] is not None else 0,
+                                heading=int(val[3]) if val[3] is not None else 0,
                             )
                         )
     except Exception as e:
-        print(f"Error fetching FR24 feed: {e}")
+        print(f"FR24 fetch error: {e}")
+
+    # যদি Flightradar24 ডাটা দিতে ব্যর্থ হয়, তবে ব্যাকআপ OpenSky Network কাজ করবে
+    if not contacts:
+        opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&laminar={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(opensky_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    states = data.get("states") or []
+                    for s in states:
+                        if len(s) >= 11 and s[5] is not None and s[6] is not None:
+                            # মিটার থেকে ফিট এবং m/s থেকে knots রূপান্তর
+                            alt_ft = int(s[7] * 3.28084) if s[7] is not None else 0
+                            spd_kts = int(s[9] * 1.94384) if s[9] is not None else 0
+                            contacts.append(
+                                Contact(
+                                    hex=str(s[0]),
+                                    callsign=str(s[1]).strip() if s[1] else "N/A",
+                                    lat=float(s[6]),
+                                    lon=float(s[5]),
+                                    altitude_ft=alt_ft,
+                                    speed_kts=spd_kts,
+                                    heading=int(s[10]) if s[10] is not None else 0,
+                                )
+                            )
+        except Exception as e:
+            print(f"OpenSky fetch error: {e}")
 
     return contacts
-
+    
 async def scan_halo(lat: float, lon: float) -> list[Contact]:
     async with httpx.AsyncClient(follow_redirects=True) as client:
         errors: list[str] = []
