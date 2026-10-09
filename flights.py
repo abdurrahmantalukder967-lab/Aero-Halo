@@ -231,13 +231,116 @@ TYPES: dict[str, str] = {
     "SR22": "Cirrus SR22"
 }
 
+def get_country_from_reg(reg: str | None) -> str:
+    if not reg or reg == "N/A":
+        return "Unknown"
+    
+    reg = reg.upper()
+    prefixes = {
+    "S2-": "Bangladesh 🇧🇩",
+    "S3-": "Bangladesh (Military) 🇧🇩", 
+    "VT-": "India 🇮🇳",
+    "AP-": "Pakistan 🇵🇰",
+    "4R-": "Sri Lanka 🇱🇰",
+    "8Q-": "Maldives 🇲🇻",
+    "A5-": "Bhutan 🇧🇹",
+    "9N-": "Nepal 🇳🇵",
+    "A6-": "United Arab Emirates 🇦🇪",
+    "A7-": "Qatar 🇶🇦",
+    "A9C-": "Bahrain 🇧🇭",
+    "HZ-": "Saudi Arabia 🇸🇦",
+    "9K-": "Kuwait 🇰🇼",
+    "JY-": "Jordan 🇯🇴",
+    "A4O-": "Oman 🇴🇲",
+    "OD-": "Lebanon 🇱🇧",
+    "YI-": "Iraq 🇮🇶",
+    "EP-": "Iran 🇮🇷",
+    "TC-": "Turkey 🇹🇷",
+    "9M-": "Malaysia 🇲🇾",
+    "9V-": "Singapore 🇸🇬",
+    "HS-": "Thailand 🇹🇭",
+    "VN-": "Vietnam 🇻🇳",
+    "PK-": "Indonesia 🇮🇩",
+    "RP-": "Philippines 🇵🇭",
+    "XY-": "Myanmar 🇲🇲",
+    "XZ-": "Myanmar 🇲🇲",
+    "RD-": "Laos 🇱🇦",
+    "XU-": "Cambodia 🇰🇭",
+    "V8-": "Brunei 🇧🇳",
+    "B-": "China / Taiwan / Hong Kong 🇨🇳",
+    "JA-": "Japan 🇯🇵",
+    "HL-": "South Korea 🇰🇷",
+    "P-": "North Korea 🇰🇵",
+    "JU-": "Mongolia 🇲🇳",
+    "G-": "United Kingdom 🇬🇧",
+    "F-": "France 🇫🇷",
+    "D-": "Germany 🇩🇪",
+    "EI-": "Ireland 🇮🇪",
+    "EJ-": "Ireland 🇮🇪",
+    "EC-": "Spain 🇪🇸",
+    "I-": "Italy 🇮🇹",
+    "PH-": "Netherlands 🇳🇱",
+    "OO-": "Belgium 🇧🇪",
+    "HB-": "Switzerland 🇨🇭",
+    "OE-": "Austria 🇦🇹",
+    "CS-": "Portugal 🇵🇹",
+    "SX-": "Greece 🇬🇷",
+    "SE-": "Sweden 🇸🇪",
+    "LN-": "Norway 🇳🇴",
+    "OY-": "Denmark 🇩🇰",
+    "OH-": "Finland 🇫🇮",
+    "SP-": "Poland 🇵🇱",
+    "HA-": "Hungary 🇭🇺",
+    "OK-": "Czech Republic 🇨🇿",
+    "OM-": "Slovakia 🇸🇰",
+    "YR-": "Romania 🇷🇴",
+    "LZ-": "Bulgaria 🇧🇬",
+    "RA-": "Russia 🇷🇺",
+    "RF-": "Russia (Military) 🇷🇺",
+    "UR-": "Ukraine 🇺🇦",
+    "EW-": "Belarus 🇧🇾",
+    "N-": "United States 🇺🇸",
+    "ER-": "Moldova 🇲🇩",
+    "C-": "Canada 🇨🇦",
+    "XA-": "Mexico 🇲🇽",
+    "XB-": "Mexico 🇲🇽",
+    "XC-": "Mexico 🇲🇽",
+    "PP-": "Brazil 🇧🇷",
+    "PR-": "Brazil 🇧🇷",
+    "PT-": "Brazil 🇧🇷",
+    "PU-": "Brazil 🇧🇷",
+    "PS-": "Brazil 🇧🇷",
+    "LV-": "Argentina 🇦🇷",
+    "LQ-": "Argentina 🇦🇷",
+    "CC-": "Chile 🇨🇱",
+    "HK-": "Colombia 🇨🇴",
+    "VH-": "Australia 🇦🇺",
+    "ZK-": "New Zealand 🇳🇿",
+    "ZL-": "New Zealand 🇳🇿",
+    "ZM-": "New Zealand 🇳🇿",
+    "ZS-": "South Africa 🇿🇦",
+    "ZT-": "South Africa 🇿🇦",
+    "ZU-": "South Africa 🇿🇦",
+    "SU-": "Egypt 🇪🇬",
+    "5N-": "Nigeria 🇳🇬",
+    "5Y-": "Kenya 🇰🇪",
+    "ET-": "Ethiopia 🇪🇹",
+    "7T-": "Algeria 🇩🇿",
+    "CN-": "Morocco 🇲🇦"
+    }
+    
+    for prefix, country in prefixes.items():
+        if reg.startswith(prefix):
+            return country
+            
+    return "International"
+
 
 @dataclass
 class Contact:
     hex: str
     callsign: str
     registration: str | None
-    flag: str | None
     airline: str
     aircraft: str
     type_code: str | None
@@ -346,7 +449,6 @@ async def _from_fr24(client: httpx.AsyncClient, lat: float, lon: float) -> list[
             continue
         type_code = str(row[8]).strip().upper() if len(row) > 8 and row[8] else None
         reg = str(row[9]).strip() if len(row) > 9 and row[9] else None
-        flag = str(details[17]) if len(details) > 17 and details[17] else "N/A"
         origin = str(row[11]).strip() if len(row) > 11 and row[11] else None
         dest = str(row[12]).strip() if len(row) > 12 and row[12] else None
         flight_no = str(row[13]).strip().upper() if len(row) > 13 and row[13] else ""
@@ -362,7 +464,7 @@ async def _from_fr24(client: httpx.AsyncClient, lat: float, lon: float) -> list[
                 hex=hex_id,
                 callsign=callsign,
                 registration=reg,
-                flag=flag,
+                flag=get_country_from_reg(reg)
                 airline=airline,
                 aircraft=aircraft_name(type_code),
                 type_code=type_code,
@@ -560,7 +662,6 @@ def format_alert(contact: Contact, *, entered: bool = True) -> str:
         f"Flight      {contact.callsign}\n"
         f"Aircraft    {contact.aircraft}{reg}\n"
         f"Route       {contact.route}\n"
-        f"Country:    {c.flag}\n"
         f"Altitude    {alt}\n"
         f"Speed       {spd}\n"
         f"Heading     {hdg}"
