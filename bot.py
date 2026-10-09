@@ -160,10 +160,16 @@ async def _send_contacts(bot, chat_id: int, contacts: list[Contact], *, force: b
     return sent
 
 
-async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool) -> bool:
+async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool = False) -> bool:
     async with _lock(chat_id):
         try:
-            contacts = await scan_halo(lat, lon)
+            all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+            contacts = []
+            for ac in all_aircraft:
+                dist = haversine_km(lat, lon, ac.lat, ac.lon)
+                if dist <= HALO_KM:
+                    ac.distance_km = round(dist, 1)
+                    contacts.append(ac)
         except Exception:
             log.exception("scan failed chat=%s", chat_id)
             now = time.time()
@@ -174,6 +180,7 @@ async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: b
                 except Exception:
                     log.exception("fail notice not sent chat=%s", chat_id)
             return False
+
         log.info("scan chat=%s aircraft=%s force=%s", chat_id, len(contacts), force)
         sent = await _send_contacts(bot, chat_id, contacts, force=force)
         STORE.save_seen(chat_id, sent)
