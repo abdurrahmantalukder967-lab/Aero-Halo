@@ -464,7 +464,7 @@ async def _from_fr24(client: httpx.AsyncClient, lat: float, lon: float) -> list[
                 hex=hex_id,
                 callsign=callsign,
                 registration=reg,
-                flag=get_country_from_reg(reg)
+                flag=get_country_from_reg(reg),
                 airline=airline,
                 aircraft=aircraft_name(type_code),
                 type_code=type_code,
