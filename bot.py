@@ -245,54 +245,41 @@ async def _arm(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, l
     await _scan_and_alert(context.bot, update.effective_chat.id, lat, lon, force=True)
 
 
-async def poll_watchers_async(app: Application):
-    """
-    মাত্র ১টি গ্লোবাল API কলে সব ইউজারের এলাকায় বিমান ফিল্টার করে নোটিফিকেশন পাঠাবে।
-    """
-    while True:
-        try:
-            watchers = list(STORE.active_watchers())
-            if not watchers:
-                await asyncio.sleep(30)
-                continue
+async def poll_watchers_async(context: ContextTypes.DEFAULT_TYPE):
+    app = context.application
+    try:
+        watchers = list(STORE.active_watchers())
+        if not watchers:
+            return
 
-            # ১. মাত্র ১টি API কলে পুরো রিজিয়নের সব লাইভ বিমান আনা
-            all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+        all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
 
-            # ২. মেমোরিতে প্রতিটি ইউজারের লোকেশন অনুযায়ী ডিস্ট্যান্স ফিল্টার করা
-            for w in watchers:
-                fresh_contacts = []
-                current_hexes = set()
+        for w in watchers:
+            fresh_contacts = []
+            current_hexes = set()
 
-                for ac in all_aircraft:
-                    dist = haversine_km(w.lat, w.lon, ac.lat, ac.lon)
-                    if dist <= HALO_KM:  # ৯০ কিমির ভেতরে থাকলে
-                        current_hexes.add(ac.hex)
-                        if ac.hex not in w.seen_hexes:
-                            # কাস্টম ডিস্ট্যান্স সেট করে নোটিফিকেশন লিস্টে রাখা
-                            ac_copy = dataclasses.replace(ac, distance_km=round(dist, 1))
-                            fresh_contacts.append(ac_copy)
+            for ac in all_aircraft:
+                dist = haversine_km(w.lat, w.lon, ac.lat, ac.lon)
+                if dist <= HALO_KM:
+                    current_hexes.add(ac.hex)
+                    if ac.hex not in w.seen_hexes:
+                        ac_copy = dataclasses.replace(ac, distance_km=round(dist, 1))
+                        fresh_contacts.append(ac_copy)
 
-                # ইউজারের seen_hexes আপডেট করা
-                STORE.save_seen(w.chat_id, current_hexes)
+            STORE.save_seen(w.chat_id, current_hexes)
 
-                # ৩. শুধু নতুন এন্টার করা বিমানের জন্য ইউজারকে মেসেজ পাঠানো
-                for contact in fresh_contacts:
-                    try:
-                        await app.bot.send_message(
-                            chat_id=w.chat_id,
-                            text=format_alert(contact),
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        log.exception("Failed to send alert to %s: %s", w.chat_id, e)
+            for contact in fresh_contacts:
+                try:
+                    await app.bot.send_message(
+                        chat_id=w.chat_id,
+                        text=format_alert(contact),
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    log.exception("Failed to send alert to %s: %s", w.chat_id, e)
 
-        except Exception as e:
-            log.exception("Error in global background poll: %s", e)
-
-        # প্রতি ৪৫ সেকেন্ড পর পর পরবর্তী স্ক্যান
-        await asyncio.sleep(45)
-
+    except Exception as e:
+        log.exception("Error in global background poll: %s", e)
 
 def _ensure_event_loop() -> None:
     """Python 3.14 no longer creates a loop for the main thread. PTB 21 crashes without one."""
