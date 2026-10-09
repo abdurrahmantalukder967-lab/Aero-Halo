@@ -24,7 +24,7 @@ from telegram.ext import (
     filters,
 )
 
-from flights import HALO_KM, Contact, format_alert, scan_halo
+from flights import scan_global_bbox, format_alert, Contact
 from store import Store
 
 
