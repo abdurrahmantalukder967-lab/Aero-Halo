@@ -16,8 +16,10 @@ import httpx
 
 HALO_KM = 90.0
 NM_TO_KM = 1.852
-USER_AGENT = "Mozilla/5.0 (compatible; AeroHalo/1.0; +https://aero-halo.example)"
-
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Referer": "https://www.flightradar24.com/"
+}
 AIRLINES: dict[str, str] = {
     "AWA": "Air Astra",
     "BBC": "Biman Bangladesh Airlines",
