@@ -38,7 +38,7 @@ USER_ALERTED_PLANES = {}
 USER_PAUSED = set()
 
 AIRLINE_NAMES = {
-    AWA": "Air Astra",
+    "AWA": "Air Astra",
     "BBC": "Biman Bangladesh Airlines",
     "US-Bangla": "US-Bangla Airlines",
     "UBG": "US-Bangla Airlines",
