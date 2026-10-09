@@ -263,11 +263,11 @@ async def poll_watchers_async(context: ContextTypes.DEFAULT_TYPE):
                 if dist <= HALO_KM:
                     current_hexes.add(ac.hex)
                     if ac.hex not in w.seen_hexes:
-                        ac_copy = dataclasses.replace(ac, distance_km=round(dist, 1))
-                        fresh_contacts.append(ac_copy)
+                        # সরাসরি দূরত্ব সেট করুন, dataclasses.replace দরকার নেই
+                        ac.distance_km = round(dist, 1)
+                        fresh_contacts.append(ac)
 
-            STORE.save_seen(w.chat_id, current_hexes)
-
+            # ১. আগে নতুন আসা বিমানের মেসেজ পাঠান
             for contact in fresh_contacts:
                 try:
                     await app.bot.send_message(
@@ -277,6 +277,9 @@ async def poll_watchers_async(context: ContextTypes.DEFAULT_TYPE):
                     )
                 except Exception as e:
                     log.exception("Failed to send alert to %s: %s", w.chat_id, e)
+
+            # ২. মেসেজ পাঠানো সফল হওয়ার পর দেখা বিমানগুলো সেভ করুন
+            STORE.save_seen(w.chat_id, current_hexes)
 
     except Exception as e:
         log.exception("Error in global background poll: %s", e)
