@@ -331,6 +331,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await _scan_and_alert(context.bot, chat_id, lat, lon, force=False)
 def main() -> None:
+    _health_server()
+    
+    
+    
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable missing")
