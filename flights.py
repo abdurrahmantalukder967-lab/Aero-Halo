@@ -626,103 +626,64 @@ async def _enrich_routes(client: httpx.AsyncClient, contacts: list[Contact]) -> 
     except TimeoutError:
         return
 
+
+import httpx
+from dataclasses import dataclass
+
+@dataclass
+class Contact:
+    hex: str
+    callsign: str
+    lat: float
+    lon: float
+    altitude_ft: int
+    speed_kts: int
+    heading: int
+    distance_km: float = 0.0
+
 async def scan_global_bbox(
-    min_lat: float = 20.0, 
-    max_lat: float = 27.0, 
-    min_lon: float = 88.0, 
+    min_lat: float = 20.0,
+    max_lat: float = 27.0,
+    min_lon: float = 88.0,
     max_lon: float = 93.0
 ) -> list[Contact]:
-    
-    # ১. প্রথমে Flightradar24 ট্রাই করবে
-    fr24_bounds = f"{max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}"
-    fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={fr24_bounds}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&type=json"
+    # Flightradar24 API URL
+    url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat},{min_lat},{min_lon},{max_lon}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=0&estimated=1&maxage=14400&gliders=0"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.flightradar24.com/"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-        try:
-            resp = await client.get(fr24_url, headers=headers)
+    contacts = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+            resp = await client.get(url)
             if resp.status_code == 200:
                 data = resp.json()
-                for key, row in data.items():
-                    if key in ("full_count", "version", "stats") or not isinstance(row, list) or len(row) < 18:
-                        continue
-                    ac_lat, ac_lon = row[1], row[2]
-                    if not isinstance(ac_lat, (int, float)) or not isinstance(ac_lon, (int, float)):
-                        continue
-                    if row[14] in (1, True, "1"): # ground
-                        continue
-                    alt = row[4] if isinstance(row[4], (int, float)) else 0.0
-                    if alt < 100:
-                        continue
-                    
-                    type_code = str(row[8]).strip().upper() if len(row) > 8 and row[8] else "N/A"
-                    reg = str(row[9]).strip() if len(row) > 9 and row[9] else "N/A"
-                    origin = str(row[11]).strip() if len(row) > 11 and row[11] else ""
-                    dest = str(row[12]).strip() if len(row) > 12 and row[12] else ""
-                    flight_no = str(row[13]).strip() if len(row) > 13 and row[13] else ""
-                    callsign = str(row[16]).strip().upper() if len(row) > 16 and row[16] else flight_no
-                    hex_id = str(row[0] or key).strip().lower()
-                    
-                    contacts.append(Contact(
-                        hex=hex_id,
-                        callsign=callsign if callsign else "UNKNOWN",
-                        registration=reg,
-                        flag=get_country_from_reg(reg),
-                        airline=lookup_airline(callsign),
-                        aircraft=type_code,
-                        type_code=type_code,
-                        route=f"{origin} ➔ {dest}" if origin or dest else "Route unknown",
-                        altitude_ft=alt,
-                        speed_kt=float(row[5]) if isinstance(row[5], (int, float)) else 0.0,
-                        heading=float(row[3]) if isinstance(row[3], (int, float)) else 0.0,
-                        lat=float(ac_lat),
-                        lon=float(ac_lon),
-                        distance_km=0.0
-                    ))
-        except Exception:
-            pass
+                for key, val in data.items():
+                    # সিস্টেম তথ্য বাদে শুধু প্লেনের ডাটা প্রসেস করবে
+                    if isinstance(val, list) and len(val) >= 18:
+                        hex_code = str(key)
+                        lat = float(val[1])
+                        lon = float(val[2])
+                        heading = int(val[3]) if val[3] is not None else 0
+                        alt = int(val[4]) if val[4] is not None else 0
+                        speed = int(val[5]) if val[5] is not None else 0
+                        callsign = str(val[16]).strip() if val[16] else "N/A"
 
-    # ২. Flightradar24 খালি ডাটা দিলে OpenSky Network থেকে ব্যাকআপ ডাটা আনবে
-    if not contacts:
-        opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&l_min_lon={min_lon}&lamax={max_lat}&l_max_lon={max_lon}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                resp = await client.get(opensky_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    states = data.get("states") or []
-                    for s in states:
-                        if not s[5] or not s[6] or s[8]: # lat, lon, on_ground
-                            continue
-                        hex_id = str(s[0]).strip().lower()
-                        callsign = str(s[1]).strip() if s[1] else "UNKNOWN"
-                        alt_m = s[7] or 0
-                        alt_ft = round(alt_m * 3.28084)
-                        spd_ms = s[9] or 0
-                        spd_kt = round(spd_ms * 1.94384)
-                        
-                        contacts.append(Contact(
-                            hex=hex_id,
-                            callsign=callsign,
-                            registration="N/A",
-                            flag="✈️",
-                            airline=lookup_airline(callsign),
-                            aircraft="N/A",
-                            type_code="N/A",
-                            route="Route unknown",
-                            altitude_ft=alt_ft,
-                            speed_kt=spd_kt,
-                            heading=float(s[10] or 0),
-                            lat=float(s[6]),
-                            lon=float(s[5]),
-                            distance_km=0.0
-                        ))
-            except Exception:
-                pass
+                        contacts.append(
+                            Contact(
+                                hex=hex_code,
+                                callsign=callsign,
+                                lat=lat,
+                                lon=lon,
+                                altitude_ft=alt,
+                                speed_kts=speed,
+                                heading=heading,
+                            )
+                        )
+    except Exception as e:
+        print(f"Error fetching FR24 feed: {e}")
 
     return contacts
 
