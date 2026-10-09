@@ -626,6 +626,79 @@ async def _enrich_routes(client: httpx.AsyncClient, contacts: list[Contact]) -> 
     except TimeoutError:
         return
 
+async def scan_global_bbox(
+    min_lat: float = 20.0, 
+    max_lat: float = 27.0, 
+    min_lon: float = 88.0, 
+    max_lon: float = 93.0
+) -> list[Contact]:
+    """
+    পুরো অঞ্চলের সব প্লেন মাত্র ১টি API কলে নিয়ে আসবে।
+    """
+    bounds = f"{max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}"
+    url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={bounds}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&type=json"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    contacts = []
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+        except Exception:
+            return []
+
+    for key, row in data.items():
+        if key in ("full_count", "version", "stats") or not isinstance(row, list) or len(row) < 18:
+            continue
+
+        ac_lat, ac_lon = row[1], row[2]
+        if not isinstance(ac_lat, (int, float)) or not isinstance(ac_lon, (int, float)):
+            continue
+
+        on_ground = row[14] if len(row) > 14 else 0
+        if on_ground in (1, True, "1"):
+            continue
+
+        alt = row[4] if isinstance(row[4], (int, float)) else 0.0
+        if alt < 100:
+            continue
+
+        type_code = str(row[8]).strip().upper() if len(row) > 8 and row[8] else "N/A"
+        reg = str(row[9]).strip() if len(row) > 9 and row[9] else "N/A"
+        origin = str(row[11]).strip() if len(row) > 11 and row[11] else ""
+        dest = str(row[12]).strip() if len(row) > 12 and row[12] else ""
+        flight_no = str(row[13]).strip() if len(row) > 13 and row[13] else ""
+        callsign = str(row[16]).strip().upper() if len(row) > 16 and row[16] else flight_no
+        hex_id = str(row[0] or key).strip().lower()
+
+        route = f"{origin} ➔ {dest}" if origin or dest else "Route unknown"
+        spd = float(row[5]) if isinstance(row[5], (int, float)) else 0.0
+        heading = float(row[3]) if isinstance(row[3], (int, float)) else 0.0
+
+        c = Contact(
+            hex=hex_id,
+            callsign=callsign if callsign else "UNKNOWN",
+            registration=reg,
+            flag=get_country_from_reg(reg),
+            airline=lookup_airline(callsign),
+            aircraft=type_code,
+            type_code=type_code,
+            route=route,
+            altitude_ft=alt,
+            speed_kt=spd,
+            heading=heading,
+            lat=float(ac_lat),
+            lon=float(ac_lon),
+            distance_km=0.0
+        )
+        contacts.append(c)
+
+    return contacts
 
 async def scan_halo(lat: float, lon: float) -> list[Contact]:
     async with httpx.AsyncClient(follow_redirects=True) as client:
