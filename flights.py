@@ -646,7 +646,6 @@ async def scan_global_bbox(
     min_lon: float = 88.0,
     max_lon: float = 93.0
 ) -> list[Contact]:
-    contacts = []
     
     # ১. প্রথম চেষ্টা: Flightradar24
     fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat},{min_lat},{min_lon},{max_lon}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=0&estimated=1&maxage=14400&gliders=0"
