@@ -127,8 +127,7 @@ async def scan_global_bbox(
                             )
         except Exception:
         pass
-
-    return contacts
+   return contacts
 def format_alert(contact: Contact, entered: bool = True) -> str:
     status = "entered" if entered else "is inside"
     airline_name = AIRLINES.get(contact.callsign[:3], "")
