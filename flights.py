@@ -237,6 +237,7 @@ class Contact:
     hex: str
     callsign: str
     registration: str | None
+    flag: str | None
     airline: str
     aircraft: str
     type_code: str | None
@@ -345,6 +346,7 @@ async def _from_fr24(client: httpx.AsyncClient, lat: float, lon: float) -> list[
             continue
         type_code = str(row[8]).strip().upper() if len(row) > 8 and row[8] else None
         reg = str(row[9]).strip() if len(row) > 9 and row[9] else None
+        flag = str(details[17]) if len(details) > 17 and details[17] else "N/A"
         origin = str(row[11]).strip() if len(row) > 11 and row[11] else None
         dest = str(row[12]).strip() if len(row) > 12 and row[12] else None
         flight_no = str(row[13]).strip().upper() if len(row) > 13 and row[13] else ""
@@ -360,6 +362,7 @@ async def _from_fr24(client: httpx.AsyncClient, lat: float, lon: float) -> list[
                 hex=hex_id,
                 callsign=callsign,
                 registration=reg,
+                flag=flag,
                 airline=airline,
                 aircraft=aircraft_name(type_code),
                 type_code=type_code,
@@ -557,6 +560,7 @@ def format_alert(contact: Contact, *, entered: bool = True) -> str:
         f"Flight      {contact.callsign}\n"
         f"Aircraft    {contact.aircraft}{reg}\n"
         f"Route       {contact.route}\n"
+        f"Country:    {c.flag}\n"
         f"Altitude    {alt}\n"
         f"Speed       {spd}\n"
         f"Heading     {hdg}"
