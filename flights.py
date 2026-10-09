@@ -103,7 +103,7 @@ async def scan_global_bbox(
                         )
     except Exception as e:
         print(f"FR24 fetch error: {e}")
-
+        
     if not contacts:
         opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
         try:
@@ -125,8 +125,8 @@ async def scan_global_bbox(
                                     heading=int(s[10]) if s[10] is not None else 0,
                                 )
                             )
-        except Exception as e:
-            print(f"OpenSky fetch error: {e}")
+        except Exception:
+        pass
 
     return contacts
 def format_alert(contact: Contact, entered: bool = True) -> str:
