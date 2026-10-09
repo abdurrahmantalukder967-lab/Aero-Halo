@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-HALO_KM = 300.0
+HALO_KM = 90.0
 NM_TO_KM = 1.852
 
 HEADERS = {
@@ -76,10 +76,19 @@ async def scan_global_bbox(
 ) -> list[Contact]:
     contacts = []
 
-    fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat},{min_lat},{min_lon},{max_lon}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=1&gliders=0"
+    # FR24 এর নতুন স্ট্যান্ডার্ড ফিড ইউআরএল ফরম্যাট
+    fr24_url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.json?bounds={max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=1&gliders=0"
+
+    custom_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.flightradar24.com/",
+        "Origin": "https://www.flightradar24.com"
+    }
 
     try:
-        async with httpx.AsyncClient(timeout=8.0, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=custom_headers, follow_redirects=True) as client:
             resp = await client.get(fr24_url)
             if resp.status_code == 200:
                 data = resp.json()
@@ -97,9 +106,12 @@ async def scan_global_bbox(
                                 heading=int(val[3]) if val[3] is not None else 0,
                             )
                         )
+            else:
+                print(f"FR24 Response Status: {resp.status_code}")
     except Exception as e:
         print(f"FR24 fetch error: {e}")
 
+    # যদি FR24 ফেল করে তবে ব্যাকআপ OpenSky
     if not contacts:
         opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
         try:
