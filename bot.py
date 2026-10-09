@@ -317,10 +317,12 @@ def _health_server() -> None:
 
 
 def main() -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
-        raise SystemExit("Set TELEGRAM_BOT_TOKEN in .env")
+        raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable missing")
+
     app = Application.builder().token(token).build()
+
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("status", cmd_status))
@@ -329,15 +331,18 @@ def main() -> None:
     app.add_handler(CommandHandler("now", cmd_now))
     app.add_handler(CommandHandler("set", cmd_set))
     app.add_handler(MessageHandler(filters.LOCATION, on_location))
-    job = app.job_queue
-    if job is None:
-        raise SystemExit("Job queue extra is missing. Install python-telegram-bot[job-queue].")
-    job.run_repeating(poll_watchers_async, interval=POLL_SECONDS, first=15)
-    _ensure_event_loop()
-    _health_server()
-    log.info("AeroHalo bot starting")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
+    job_queue = app.job_queue
+    if job_queue:
+        job_queue.run_repeating(
+            lambda ctx: asyncio.create_task(poll_watchers_async(app)),
+            interval=POLL_SECONDS,
+            first=5
+        )
+
+    log.info("AeroHalo bot starting...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
