@@ -163,14 +163,12 @@ async def _send_contacts(bot, chat_id: int, contacts: list[Contact], *, force: b
 async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool = False) -> bool:
     async with _lock(chat_id):
         try:
-            # গ্লোবাল ফেচ থেকে ডাটা আনবে
-            all_aircraft = await scan_global_bbox()
+            all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
             contacts = []
             
             for ac in all_aircraft:
                 dist = haversine_km(lat, lon, ac.lat, ac.lon)
                 if dist <= HALO_KM:
-                    # dataclasses replace এর জায়গায় সরাসরি অ্যাসাইনমেন্ট
                     ac.distance_km = round(dist, 1)
                     contacts.append(ac)
 
@@ -181,11 +179,8 @@ async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: b
                 )
                 return True
 
-            for c in contacts:
-                await bot.send_message(chat_id, format_alert(c), parse_mode="Markdown")
-
-            sent_hexes = {c.hex for c in contacts}
-            STORE.save_seen(chat_id, sent_hexes)
+            sent = await _send_contacts(bot, chat_id, contacts, force=force)
+            STORE.save_seen(chat_id, sent)
             return True
 
         except Exception:
@@ -265,51 +260,30 @@ async def _arm(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, l
     await _scan_and_alert(context.bot, update.effective_chat.id, lat, lon, force=True)
 
 
-async def poll_watchers_async(context: ContextTypes.DEFAULT_TYPE):
-    app = context.application
+async def poll_watchers_async(app: Application):
     try:
-        watchers = list(STORE.active_watchers())
-        if not watchers:
+        all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+        if not all_aircraft:
             return
 
-        all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+        watchers = STORE.get_all_watchers()
+        for chat_id, data in watchers.items():
+            lat, lon = data.get("lat"), data.get("lon")
+            if lat is None or lon is None:
+                continue
 
-        for w in watchers:
-            fresh_contacts = []
-            current_hexes = set()
-
+            contacts = []
             for ac in all_aircraft:
-                dist = haversine_km(w.lat, w.lon, ac.lat, ac.lon)
+                dist = haversine_km(lat, lon, ac.lat, ac.lon)
                 if dist <= HALO_KM:
-                    current_hexes.add(ac.hex)
-                    if ac.hex not in w.seen_hexes:
-                        # সরাসরি দূরত্ব সেট করুন, dataclasses.replace দরকার নেই
-                        ac.distance_km = round(dist, 1)
-                        fresh_contacts.append(ac)
+                    ac.distance_km = round(dist, 1)
+                    contacts.append(ac)
 
-            # ১. আগে নতুন আসা বিমানের মেসেজ পাঠান
-            for contact in fresh_contacts:
-                try:
-                    await app.bot.send_message(
-                        chat_id=w.chat_id,
-                        text=format_alert(contact),
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    log.exception("Failed to send alert to %s: %s", w.chat_id, e)
-
-            # ২. মেসেজ পাঠানো সফল হওয়ার পর দেখা বিমানগুলো সেভ করুন
-            STORE.save_seen(w.chat_id, current_hexes)
+            if contacts:
+                await _send_contacts(app.bot, chat_id, contacts, force=False)
 
     except Exception as e:
-        log.exception("Error in global background poll: %s", e)
-
-def _ensure_event_loop() -> None:
-    """Python 3.14 no longer creates a loop for the main thread. PTB 21 crashes without one."""
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
+        log.exception("Error in global background poll")
 
 
 def _health_server() -> None:
