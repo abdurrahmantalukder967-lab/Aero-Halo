@@ -51,6 +51,7 @@ STORE = Store()
 COORD_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)")
 POLL_SECONDS = 45
 MAX_ALERTS = 15
+HALO_KM = 90.0
 _LOCKS: dict[int, asyncio.Lock] = {}
 _FAIL_NOTICE: dict[int, float] = {}
 _BOOT_SENT: set[int] = set()
