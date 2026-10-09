@@ -125,8 +125,8 @@ async def scan_global_bbox(
                                     heading=int(s[10]) if s[10] is not None else 0,
                                 )
                             )
-   except Exception:
-       pass
+      except Exception:
+         pass
    return contacts
 def format_alert(contact: Contact, entered: bool = True) -> str:
     status = "entered" if entered else "is inside"
