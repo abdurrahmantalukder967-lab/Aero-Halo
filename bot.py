@@ -160,17 +160,34 @@ async def _send_contacts(bot, chat_id: int, contacts: list[Contact], *, force: b
         await bot.send_message(chat_id, f"{extra} more aircraft are inside 90 km. Send /now to list them.")
     return sent
 
-
 async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: bool = False) -> bool:
     async with _lock(chat_id):
         try:
-            all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
+            # গ্লোবাল ফেচ থেকে ডাটা আনবে
+            all_aircraft = await scan_global_bbox()
             contacts = []
+            
             for ac in all_aircraft:
                 dist = haversine_km(lat, lon, ac.lat, ac.lon)
                 if dist <= HALO_KM:
+                    # dataclasses replace এর জায়গায় সরাসরি অ্যাসাইনমেন্ট
                     ac.distance_km = round(dist, 1)
                     contacts.append(ac)
+
+            if not contacts:
+                await bot.send_message(
+                    chat_id,
+                    f"Scan finished. No airborne aircraft inside {int(HALO_KM)} km right now. I will message you when one enters."
+                )
+                return True
+
+            for c in contacts:
+                await bot.send_message(chat_id, format_alert(c), parse_mode="Markdown")
+
+            sent_hexes = {c.hex for c in contacts}
+            STORE.save_seen(chat_id, sent_hexes)
+            return True
+
         except Exception:
             log.exception("scan failed chat=%s", chat_id)
             now = time.time()
@@ -181,11 +198,6 @@ async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: b
                 except Exception:
                     log.exception("fail notice not sent chat=%s", chat_id)
             return False
-
-        log.info("scan chat=%s aircraft=%s force=%s", chat_id, len(contacts), force)
-        sent = await _send_contacts(bot, chat_id, contacts, force=force)
-        STORE.save_seen(chat_id, sent)
-        return True
 
 
 async def cmd_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
