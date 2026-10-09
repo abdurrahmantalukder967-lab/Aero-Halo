@@ -164,6 +164,9 @@ async def _scan_and_alert(bot, chat_id: int, lat: float, lon: float, *, force: b
     async with _lock(chat_id):
         try:
 
+
+
+
 all_aircraft = await scan_global_bbox(20.0, 27.0, 88.0, 93.0)
             contacts = []
             
