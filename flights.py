@@ -1,8 +1,4 @@
-"""Live aircraft lookup within a 90 km halo.
-
-One request returns positions plus airline, type and route when the feed has them.
-Route enrichment is best-effort and never blocks the Telegram alert.
-"""
+"""Live aircraft lookup within a 90 km halo."""
 
 from __future__ import annotations
 
@@ -103,7 +99,7 @@ async def scan_global_bbox(
                         )
     except Exception as e:
         print(f"FR24 fetch error: {e}")
-        
+
     if not contacts:
         opensky_url = f"https://opensky-network.org/api/states/all?lamin={min_lat}&lamax={max_lat}&lomin={min_lon}&lomax={max_lon}"
         try:
@@ -125,13 +121,15 @@ async def scan_global_bbox(
                                     heading=int(s[10]) if s[10] is not None else 0,
                                 )
                             )
-      except Exception:
-         pass
-   return contacts
+        except Exception:
+            pass
+
+    return contacts
+
+
 def format_alert(contact: Contact, entered: bool = True) -> str:
     status = "entered" if entered else "is inside"
     airline_name = AIRLINES.get(contact.callsign[:3], "")
-    callsign_str = f" ({contact.callsign})" if contact.callsign != "N/A" else ""
     airline_str = f"\nAirline: {airline_name}" if airline_name else ""
     
     return (
@@ -143,4 +141,4 @@ def format_alert(contact: Contact, entered: bool = True) -> str:
         f"• **Speed**: {contact.speed_kts} kts\n"
         f"• **Heading**: {contact.heading}°"
         f"{airline_str}"
-    )
+)
