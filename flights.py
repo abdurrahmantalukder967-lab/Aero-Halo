@@ -632,7 +632,6 @@ async def scan_global_bbox(
     min_lon: float = 88.0, 
     max_lon: float = 93.0
 ) -> list[Contact]:
-    contacts = []
     
     # ১. প্রথমে Flightradar24 ট্রাই করবে
     fr24_bounds = f"{max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}"
