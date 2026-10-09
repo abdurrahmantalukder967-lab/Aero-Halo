@@ -1,27 +1,13 @@
+import json
 import math
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-
-class SimpleServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-def start_port():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), SimpleServer)
-    server.serve_forever()
-
-threading.Thread(target=start_port, daemon=True).start()
-import requests
 import time
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
 
-# 1. Render Health Check & Port Binding Thread
+# 1. Render Health Check Port Binding
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -35,22 +21,37 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 def run_http_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
-    print(f"HTTP Health Check Server active on port {port}", flush=True)
+    print(f"HTTP Server active on port {port}", flush=True)
     server.serve_forever()
 
 threading.Thread(target=run_http_server, daemon=True).start()
 
 # Configuration
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8656681867:AAHo0g8ceIv3OBPbExT_k3rZUVlVvviknqw")
-CHAT_ID = os.environ.get("CHAT_ID", "8135300883")
 CHECK_INTERVAL = 45
 RADIUS_KM = 90.0
+DB_FILE = "user_locations.json"
 
-# Default Location (Sunamganj)
-MY_LAT = 25.0706365
-MY_LON = 91.4102260
+# State Persistence Handlers
+def load_locations():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
 
-alerted_planes = set()
+def save_locations(locations):
+    try:
+        with open(DB_FILE, "w") as f:
+            json.dump(locations, f)
+    except Exception as e:
+        print("Storage Save Error:", e, flush=True)
+
+USER_LOCATIONS = load_locations()  # {"chat_id": [lat, lon]}
+USER_ALERTED_PLANES = {}          # {chat_id: set(icao)}
+USER_PAUSED = set()
 
 AIRLINE_NAMES = {
     "AWA": "Air Astra", "BBC": "Biman Bangladesh Airlines", "US-Bangla": "US-Bangla Airlines",
@@ -69,6 +70,17 @@ AIRCRAFT_NAMES = {
     "B77W": "Boeing 777-300ER", "B788": "Boeing 787-8 Dreamliner", "B789": "Boeing 787-9 Dreamliner"
 }
 
+def get_keyboard():
+    return json.dumps({
+        "keyboard": [
+            [{"text": "📍 Share location", "request_location": True}],
+            [{"text": "/now"}, {"text": "/status"}],
+            [{"text": "/pause"}, {"text": "/resume"}]
+        ],
+        "resize_keyboard": True,
+        "persistent": True
+    })
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -76,101 +88,153 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
     return 2 * R * math.asin(math.sqrt(a))
 
-def send_telegram(message):
+def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
+    payload = json.dumps({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "reply_markup": json.loads(get_keyboard())
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
-        res = requests.post(url, data=data, timeout=15)
-        print("Telegram Push Response:", res.status_code, flush=True)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            pass
     except Exception as e:
-        print("Telegram Error:", e, flush=True)
+        print(f"Telegram Push Error [{chat_id}]:", e, flush=True)
 
-def get_nearby_planes(lat_center, lon_center):
-    # Dynamic bounding box calculation
-    min_lat, max_lat = lat_center - 1.5, lat_center + 1.5
-    min_lon, max_lon = lon_center - 1.5, lon_center + 1.5
-
-    url = f"https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds={max_lat:.2f},{min_lat:.2f},{min_lon:.2f},{max_lon:.2f}&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    
+def get_bd_planes():
+    url = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=27.00,20.00,88.00,93.00&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    req = urllib.request.Request(url, headers=headers)
     try:
-        r = requests.get(url, headers=headers, timeout=12)
-        if r.status_code != 200:
-            return []
-            
-        data = r.json()
-        planes = []
-        
-        for key, val in data.items():
-            if isinstance(val, list) and len(val) > 13:
-                plat, plon = val[1], val[2]
-                dist = haversine(lat_center, lon_center, plat, plon)
-                
-                if dist <= RADIUS_KM:
-                    callsign = val[16] if (len(val) > 16 and val[16]) else "Unknown"
-                    alt = val[4] if val[4] is not None else 0
-                    speed_kts = val[5] if val[5] is not None else 0
-                    speed_kmh = round(speed_kts * 1.852)
-                    
-                    reg = val[9] if (len(val) > 9 and val[9]) else "N/A"
-                    raw_aircraft = val[8] if (len(val) > 8 and val[8]) else "Unknown"
-                    aircraft_fullname = AIRCRAFT_NAMES.get(raw_aircraft.upper(), raw_aircraft)
-                    
-                    origin_code = val[11] if (len(val) > 11 and val[11]) else ""
-                    dest_code = val[12] if (len(val) > 12 and val[12]) else ""
-                    route = f"{origin_code} ➔ {dest_code}" if (origin_code and dest_code) else "Data Pending"
-
-                    raw_code = val[18] if (len(val) > 18 and val[18]) else (callsign[:3] if callsign != "Unknown" else "Unknown")
-                    airline_fullname = AIRLINE_NAMES.get(raw_code.upper(), raw_code)
-                    
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            planes = []
+            for key, val in data.items():
+                if isinstance(val, list) and len(val) > 13:
                     planes.append({
-                        "icao": key,
-                        "callsign": callsign,
-                        "airline": airline_fullname,
-                        "aircraft_name": aircraft_fullname,
-                        "registration": reg,
-                        "route": route,
-                        "dist": round(dist, 1),
-                        "alt": alt,
-                        "speed": speed_kmh
+                        "icao": key, "lat": val[1], "lon": val[2],
+                        "callsign": val[16] if len(val) > 16 and val[16] else "Unknown",
+                        "alt": val[4] or 0, "speed": round((val[5] or 0) * 1.852),
+                        "reg": val[9] if len(val) > 9 and val[9] else "N/A",
+                        "aircraft": AIRCRAFT_NAMES.get((val[8] or "").upper(), val[8] or "Unknown"),
+                        "route": f"{val[11]} ➔ {val[12]}" if len(val) > 12 and val[11] and val[12] else "Data Pending",
+                        "airline": AIRLINE_NAMES.get((val[18] or "").upper(), val[18] or "Unknown")
                     })
-        return planes
+            return planes
     except Exception as e:
         print("FR24 Fetch Error:", e, flush=True)
         return []
 
-print("Plane Engine Active...", flush=True)
+def run_manual_scan(chat_id):
+    if chat_id not in USER_LOCATIONS:
+        send_telegram(chat_id, "⚠️ No location set! Click <b>'📍 Share location'</b> first.")
+        return
+        
+    u_lat, u_lon = USER_LOCATIONS[chat_id]
+    send_telegram(chat_id, f"🔎 Scanning 90 km halo around ({u_lat:.2f}, {u_lon:.2f})...")
+    bd_planes = get_bd_planes()
+    
+    found_planes = []
+    for p in bd_planes:
+        dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
+        if dist <= RADIUS_KM:
+            p["dist"] = round(dist, 1)
+            found_planes.append(p)
+            
+    if not found_planes:
+        send_telegram(chat_id, "Scan finished. No airborne aircraft inside 90 km right now.")
+    else:
+        msg = f"✈️ <b>Current Flights in 90 km Halo ({len(found_planes)}):</b>\n\n"
+        for p in found_planes:
+            msg += f"• <b>{p['airline']}</b> ({p['callsign']})\n   {p['aircraft']} | {p['dist']} km away\n   Alt: {p['alt']} ft | Route: {p['route']}\n\n"
+        send_telegram(chat_id, msg)
 
-# Processing Loop
+def handle_telegram_updates():
+    offset = 0
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={offset}&timeout=10"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                for result in data.get("result", []):
+                    offset = result["update_id"] + 1
+                    msg = result.get("message", {})
+                    chat_id = str(msg.get("chat", {}).get("id"))
+                    
+                    if not chat_id:
+                        continue
+                        
+                    if "location" in msg:
+                        lat = msg["location"]["latitude"]
+                        lon = msg["location"]["longitude"]
+                        USER_LOCATIONS[chat_id] = [lat, lon]
+                        USER_ALERTED_PLANES[chat_id] = set()
+                        save_locations(USER_LOCATIONS)
+                        send_telegram(chat_id, f"📍 <b>Location set successfully!</b>\nLat: {lat:.4f}, Lon: {lon:.4f}\n\nScanning 90 km halo around you now...")
+                        run_manual_scan(chat_id)
+                    
+                    text = msg.get("text", "")
+                    if text == "/start":
+                        send_telegram(chat_id, "Welcome to AeroHalo! Click '📍 Share location' below to activate live flight tracking.")
+                    elif text == "/now":
+                        run_manual_scan(chat_id)
+                    elif text == "/pause":
+                        USER_PAUSED.add(chat_id)
+                        send_telegram(chat_id, "⏸️ Proximity tracking paused.")
+                    elif text == "/resume":
+                        USER_PAUSED.discard(chat_id)
+                        send_telegram(chat_id, "▶️ Proximity tracking resumed.")
+                    elif text == "/status":
+                        status = "⏸️ Paused" if chat_id in USER_PAUSED else "🟢 Active"
+                        loc_str = f"{USER_LOCATIONS[chat_id][0]:.4f}, {USER_LOCATIONS[chat_id][1]:.4f}" if chat_id in USER_LOCATIONS else "Not Set"
+                        send_telegram(chat_id, f"<b>Bot Status:</b> {status}\n<b>Location:</b> {loc_str}\n<b>Radius:</b> 90 km")
+        except Exception as e:
+            time.sleep(2)
+
+threading.Thread(target=handle_telegram_updates, daemon=True).start()
+
+print("AeroHalo Engine Fully Active & Validated...", flush=True)
+
+# Main Proximity Tracking Loop
 while True:
     try:
-        planes = get_nearby_planes(MY_LAT, MY_LON)
-        print(f"Scan Check: {len(planes)} aircraft found in {RADIUS_KM} km", flush=True)
-        
-        current_icaos = set()
-        for p in planes:
-            current_icaos.add(p["icao"])
-            if p["icao"] not in alerted_planes:
-                msg = (
-                    f"✈️🟢 <b>New Flight Detected!</b>\n\n"
-                    f"Airline: <b>{p['airline']}</b>\n"
-                    f"Aircraft: <b>{p['aircraft_name']}</b>\n"
-                    f"Reg: <b>{p['registration']}</b>\n"
-                    f"Route: <b>{p['route']}</b>\n"
-                    f"Callsign: <b>{p['callsign']}</b>\n"
-                    f"Distance: {p['dist']} km\n"
-                    f"Altitude: {p['alt']} ft\n"
-                    f"Speed: {p['speed']} km/h\n"
-                    f"Time: {datetime.now().strftime('%H:%M:%S')}"
-                )
-                send_telegram(msg)
-                alerted_planes.add(p["icao"])
-                print("Alert sent for:", p["callsign"], flush=True)
-                
-        # এলাকা ছেড়ে বেরিয়ে যাওয়া বিমানগুলো ক্লিন করা
-        alerted_planes = alerted_planes.intersection(current_icaos)
+        if USER_LOCATIONS:
+            bd_planes = get_bd_planes()
             
-    except Exception as loop_err:
-        print("Engine Loop Error:", loop_err, flush=True)
+            for chat_id, coords in list(USER_LOCATIONS.items()):
+                if chat_id in USER_PAUSED:
+                    continue
+                    
+                u_lat, u_lon = coords[0], coords[1]
+                alerted = USER_ALERTED_PLANES.setdefault(chat_id, set())
+                currently_in_range = set()
+                
+                for p in bd_planes:
+                    dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
+                    if dist <= RADIUS_KM:
+                        currently_in_range.add(p["icao"])
+                        if p["icao"] not in alerted:
+                            msg = (
+                                f"✈️🟢 <b>New Flight Detected!</b>\n\n"
+                                f"Airline: <b>{p['airline']}</b>\n"
+                                f"Aircraft: <b>{p['aircraft']}</b>\n"
+                                f"Reg: <b>{p['reg']}</b>\n"
+                                f"Route: <b>{p['route']}</b>\n"
+                                f"Callsign: <b>{p['callsign']}</b>\n"
+                                f"Distance: {round(dist, 1)} km\n"
+                                f"Altitude: {p['alt']} ft\n"
+                                f"Speed: {p['speed']} km/h\n"
+                                f"Time: {datetime.now().strftime('%H:%M:%S')}"
+                            )
+                            send_telegram(chat_id, msg)
+                            alerted.add(p["icao"])
+                
+                USER_ALERTED_PLANES[chat_id] = alerted.intersection(currently_in_range)
+                
+    except Exception as e:
+        print("Engine Loop Error:", e, flush=True)
         
     time.sleep(CHECK_INTERVAL)
