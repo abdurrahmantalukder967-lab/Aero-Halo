@@ -1,5 +1,20 @@
 import math
 import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+class SimpleServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+def start_port():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleServer)
+    server.serve_forever()
+
+threading.Thread(target=start_port, daemon=True).start()
 import requests
 import time
 from datetime import datetime
