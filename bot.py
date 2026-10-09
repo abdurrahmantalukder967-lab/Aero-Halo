@@ -348,7 +348,7 @@ def main() -> None:
     job = app.job_queue
     if job is None:
         raise SystemExit("Job queue extra is missing. Install python-telegram-bot[job-queue].")
-    job.run_repeating(poll_watchers, interval=POLL_SECONDS, first=15)
+    job.run_repeating(poll_watchers_async, interval=POLL_SECONDS, first=15)
     _ensure_event_loop()
     _health_server()
     log.info("AeroHalo bot starting")
