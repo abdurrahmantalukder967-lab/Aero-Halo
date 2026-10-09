@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-HALO_KM = 90.0
+HALO_KM = 300.0
 NM_TO_KM = 1.852
 
 HEADERS = {
