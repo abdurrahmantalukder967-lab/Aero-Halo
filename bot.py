@@ -385,35 +385,42 @@ while True:
     try:
         bd_planes = get_bd_planes()
         print(f"BD Scan Log: {len(bd_planes)} airborne aircraft tracked in BD bounds", flush=True)
-        
+
         for chat_id, coords in list(USER_LOCATIONS.items()):
             if chat_id in USER_PAUSED:
                 continue
-                
+
             u_lat, u_lon = coords[0], coords[1]
             alerted = USER_ALERTED_PLANES.setdefault(chat_id, set())
             currently_in_range = set()
-            
-for p in bd_planes:
-        dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
-        if dist <= RADIUS_KM and p["alt"] >= 550:
-            currently_in_range.add(p["icao"])
-            if p["icao"] not in alerted:
-                msg = (
-                    f"✈️🟢 <b>New Flight Detected!</b>\n\n"
-                    f"Airline: <b>{p['airline']}</b>\n"
-                    f"Aircraft: <b>{p['aircraft']}</b>\n"
-                    f"Reg: <b>{p['reg']}</b>\n"
-                    f"Route: <b>{p['route']}</b>\n"
-                    f"Callsign: <b>{p['callsign']}</b>\n"
-                    f"Distance: <b>{round(dist, 1)}</b> km\n"
-                    f"Altitude: <b>{p['alt']}</b> ft\n"
-                    f"Speed: <b>{p['speed']}</b> km/h\n"
-                    f"Time: {datetime.now().strftime('%H:%M:%S')}"
-                )
-                send_telegram(chat_id, msg)
-                alerted.add(p["icao"])
-                print(f"Alert pushed for {p['callsign']} to {chat_id}")
+
+            for p in bd_planes:
+                dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
+                if dist <= RADIUS_KM and p["alt"] >= 550:
+                    currently_in_range.add(p["icao"])
+                    if p["icao"] not in alerted:
+                        msg = (
+                            f"✈️🟢 <b>New Flight Detected!</b>\n\n"
+                            f"Airline: <b>{p['airline']}</b>\n"
+                            f"Aircraft: <b>{p['aircraft']}</b>\n"
+                            f"Reg: <b>{p['reg']}</b>\n"
+                            f"Route: <b>{p['route']}</b>\n"
+                            f"Callsign: <b>{p['callsign']}</b>\n"
+                            f"Distance: <b>{round(dist, 1)}</b> km\n"
+                            f"Altitude: <b>{p['alt']}</b> ft\n"
+                            f"Speed: <b>{p['speed']}</b> km/h\n"
+                            f"Time: {datetime.now().strftime('%H:%M:%S')}"
+                        )
+                        send_telegram(chat_id, msg)
+                        alerted.add(p["icao"])
+                        print(f"Alert pushed for {p['callsign']} to {chat_id}")
+
+            USER_ALERTED_PLANES[chat_id] = alerted.intersection(currently_in_range)
+
+    except Exception as e:
+        print("Engine Loop Error:", e, flush=True)
+
+    time.sleep(CHECK_INTERVAL)
             
     except Exception as e:
         print("Engine Loop Error:", e, flush=True)
