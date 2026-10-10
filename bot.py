@@ -421,8 +421,3 @@ while True:
         print("Engine Loop Error:", e, flush=True)
 
     time.sleep(CHECK_INTERVAL)
-            
-    except Exception as e:
-        print("Engine Loop Error:", e, flush=True)
-        
-    time.sleep(CHECK_INTERVAL)
