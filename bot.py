@@ -30,7 +30,9 @@ threading.Thread(target=run_http_server, daemon=True).start()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8656681867:AAHo0g8ceIv3OBPbExT_k3rZUVlVvviknqw")
 DEFAULT_CHAT_ID = os.environ.get("CHAT_ID", "8135300883")
 CHECK_INTERVAL = 45
-RADIUS_KM = 90.0
+RADIUS_KM = 50.0
+MIN_ALTITUDE_FT = 550
+
 
 # User Locations and States
 USER_LOCATIONS = {DEFAULT_CHAT_ID: [25.0706365, 91.4102260]}
