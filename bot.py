@@ -326,9 +326,9 @@ def run_manual_scan(chat_id):
             found_planes.append(p)
             
     if not found_planes:
-        send_telegram(chat_id, "Scan finished. No airborne aircraft inside 90 km right now.")
+        send_telegram(chat_id, "Scan finished. No airborne aircraft inside 50 km right now.")
     else:
-        msg = f"✈️ <b>Current Flights in 90 km Halo ({len(found_planes)}):</b>\n\n"
+        msg = f"✈️ <b>Current Flights in 50 km Halo ({len(found_planes)}):</b>\n\n"
         for p in found_planes:
             msg += f"• <b>{p['airline']}</b> ({p['callsign']})\n   {p['aircraft']} | {p['dist']} km away\n   Alt: {p['alt']} ft | Route: {p['route']}\n\n"
         send_telegram(chat_id, msg)
@@ -400,7 +400,7 @@ while True:
                     currently_in_range.add(p["icao"])
                     if p["icao"] not in alerted:
                         msg = (
-                            f"✈️🟢 <b>New Flight Detected!</b>\n\n"
+                            f"🛩️🟢 <b>New Flight Detected!</b>\n\n"
                             f"Airline: <b>{p['airline']}</b>\n"
                             f"Aircraft: <b>{p['aircraft']}</b>\n"
                             f"Reg: <b>{p['reg']}</b>\n"
