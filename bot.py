@@ -394,7 +394,7 @@ while True:
             alerted = USER_ALERTED_PLANES.setdefault(chat_id, set())
             currently_in_range = set()
             
-     for p in bd_planes:
+for p in bd_planes:
         dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
         if dist <= RADIUS_KM and p["alt"] >= 550:
             currently_in_range.add(p["icao"])
