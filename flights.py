@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 import httpx
 
-HALO_KM = 90.0
+HALO_KM = 50.0
 
 AIRLINES: dict[str, str] = {
     "AWA": "Air Astra",
