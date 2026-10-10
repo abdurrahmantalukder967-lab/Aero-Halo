@@ -76,7 +76,7 @@ AIRLINE_NAMES = {
     "CCA": "Air China",
     "RNA": "Nepal Airlines",
     "AJX": "Bangladesh Air Force",
-    "GTR": "MAS Galistair Infinite Aviation",
+    "GTR": "mas (Galistair Infinite Aviation)",
     "IRM": "Mahan Air",
     "BDA": "Blue Dart",
     "HYT": "YTO Cargo Airlines",
@@ -159,7 +159,8 @@ AIRLINE_NAMES = {
     "PGT": "Pegasus",
     "MJJ": "MJets",
     "GCR": "Tianjin Airlines",
-    "AXY": "AirX"
+    "AXY": "AirX",
+    "THB": "BBN Airlines"
 }
 
 AIRCRAFT_NAMES = {
