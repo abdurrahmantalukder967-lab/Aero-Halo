@@ -123,7 +123,7 @@ AIRLINE_NAMES = {
     "KNE": "flynas",
     "VJT": "VistaJet",
     "LHA": "Air Central",
-    "AKL": "SriLankan Airlines",
+    "ALK": "SriLankan Airlines",
     "OAH": "Afcom Cargo",
     "KZR": "Air Astana",
     "DLH": "Lufthansa",
@@ -152,7 +152,14 @@ AIRLINE_NAMES = {
     "CEB": "Cebu Pacific",
     "LNI": "Lion Air",
     "VSV": "SCAT",
-    "BH": "Bangladesh Air Force"
+    "BH": "Bangladesh Air Force",
+    "IGT": "Georgian Airlines",
+    "CTV": "Citilink",
+    "GIA": "Garuda Indonesia",
+    "PGT": "Pegasus",
+    "MJJ": "MJets",
+    "GCR": "Tianjin Airlines",
+    "AXY": "AirX"
 }
 
 AIRCRAFT_NAMES = {
@@ -193,6 +200,9 @@ AIRCRAFT_NAMES = {
     "A343": "Airbus 340-300",
     "E75S": "Embraer E175LR",
     "E35L": "Embraer Legacy 650",
+    "E550": "Embraer Legacy 500",
+    "E135": "Embraer Legacy 600",
+    "E190": "Embraer Lineage 1000",
     "C172": "Cessna 172R Skyhawk",
     "C295": "Airbus C-295W",
     "C30J": "Lockheed C-130J Hercules",
@@ -202,6 +212,8 @@ AIRCRAFT_NAMES = {
     "GA7C": "Gulfstream G700",
     "FA6X": "Dassault Falcon 6X EASy IV",
     "FA7X": "Dassault Falcon 7X",
+    "FA8X": "Dassault Falcon 8X EASy III",
+    "FA20": "Dassault Falcon 20",
     "IL76": "Ilyushin Il76",
     "AN32": "Antonov AN-32",
     "B429": "Bell 429 GlobalRanger",
@@ -213,6 +225,7 @@ AIRCRAFT_NAMES = {
     "GL5": "Bombardier Global 5000",
     "GLF4": "Gulfstream IV-SP",
     "GLF6": "Gulfstream G650ER",
+    "GALX": "Gulfstream G200 Galaxy",
     "GLEX": "Bombardier Global 6000",
     "GL7T": "Bombardier Global 7500",
     "GL5T": "Bombardier Global 5500",
@@ -221,10 +234,12 @@ AIRCRAFT_NAMES = {
     "F2TH": "Dassault Falcon 2000LX EASy",
     "BE20": "Beechcraft 200 King Air",
     "C25A": "Cessna Citation CJ2",
+    "C25B": "Cessna Citation CJ3",
     "C55B": "Cessna Citation Bravo",
     "C560": "Cessna Citation V",
     "A400": "Airbus A400M Atlas",
     "CL60": "Bombardier Challenger 605",
+    "CL30": "Bombardier Challenger 300",
     "MI17": "Mil Mi-171",
     "GLF5": "Gulfstream G550",
     "AT46": "ATR 42-600",
@@ -249,7 +264,11 @@ AIRCRAFT_NAMES = {
     "PRM1": "Beech 390 Premier IA",
     "L410": "Let L-410 Turbolet",
     "B212": "Bell 212",
-    "SR22": "Cirrus SR22"
+    "SR22": "Cirrus SR22",
+    "C750": "Cessna Citation X",
+    "CRJ7": "Mitsubishi CRJ-701ER",
+    "CRJ9": "Mitsubishi CRJ-900LR",
+    "CRJ2": "Mitsubishi CRJ-200LR"
 }
 
 def get_keyboard():
@@ -278,7 +297,7 @@ def send_telegram(chat_id, text):
         "parse_mode": "HTML",
         "reply_markup": json.loads(get_keyboard())
     }).encode('utf-8')
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, d=payload, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             pass
