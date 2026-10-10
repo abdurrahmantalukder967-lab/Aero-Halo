@@ -398,27 +398,22 @@ while True:
         dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
         if dist <= RADIUS_KM and p["alt"] >= 550:
             currently_in_range.add(p["icao"])
-            
-            p in bd_planes:
-                dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
-                if dist <= RADIUS_KM:
-                    currently_in_range.add(p["icao"])
-                    if p["icao"] not in alerted:
-                        msg = (
-                            f"✈️🟢 <b>New Flight Detected!</b>\n\n"
-                            f"Airline: <b>{p['airline']}</b>\n"
-                            f"Aircraft: <b>{p['aircraft']}</b>\n"
-                            f"Reg: <b>{p['reg']}</b>\n"
-                            f"Route: <b>{p['route']}</b>\n"
-                            f"Callsign: <b>{p['callsign']}</b>\n"
-                            f"Distance: {round(dist, 1)} km\n"
-                            f"Altitude: {p['alt']} ft\n"
-                            f"Speed: {p['speed']} km/h\n"
-                            f"Time: {datetime.now().strftime('%H:%M:%S')}"
-                        )
-                        send_telegram(chat_id, msg)
-                        alerted.add(p["icao"])
-                        print(f"Alert pushed for {p['callsign']} to {chat_id}", flush=True)
+            if p["icao"] not in alerted:
+                msg = (
+                    f"✈️🟢 <b>New Flight Detected!</b>\n\n"
+                    f"Airline: <b>{p['airline']}</b>\n"
+                    f"Aircraft: <b>{p['aircraft']}</b>\n"
+                    f"Reg: <b>{p['reg']}</b>\n"
+                    f"Route: <b>{p['route']}</b>\n"
+                    f"Callsign: <b>{p['callsign']}</b>\n"
+                    f"Distance: <b>{round(dist, 1)}</b> km\n"
+                    f"Altitude: <b>{p['alt']}</b> ft\n"
+                    f"Speed: <b>{p['speed']}</b> km/h\n"
+                    f"Time: {datetime.now().strftime('%H:%M:%S')}"
+                )
+                send_telegram(chat_id, msg)
+                alerted.add(p["icao"])
+                print(f"Alert pushed for {p['callsign']} to {chat_id}")
             
             USER_ALERTED_PLANES[chat_id] = alerted.intersection(currently_in_range)
             
