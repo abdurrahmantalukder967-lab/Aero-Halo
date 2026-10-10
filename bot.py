@@ -315,7 +315,7 @@ def run_manual_scan(chat_id):
         return
         
     u_lat, u_lon = USER_LOCATIONS[chat_id][0], USER_LOCATIONS[chat_id][1]
-    send_telegram(chat_id, f"🔎 Scanning 90 km halo around ({u_lat:.2f}, {u_lon:.2f})...")
+    send_telegram(chat_id, f"🔎 Scanning 50 km halo around ({u_lat:.2f}, {u_lon:.2f})...")
     bd_planes = get_bd_planes()
     
     found_planes = []
@@ -371,7 +371,7 @@ def handle_telegram_updates():
                     elif text == "/status":
                         status = "⏸️ Paused" if chat_id in USER_PAUSED else "🟢 Active"
                         loc_str = f"{USER_LOCATIONS[chat_id][0]:.4f}, {USER_LOCATIONS[chat_id][1]:.4f}" if chat_id in USER_LOCATIONS else "Not Set"
-                        send_telegram(chat_id, f"<b>Bot Status:</b> {status}\n<b>Location:</b> {loc_str}\n<b>Radius:</b> 90 km")
+                        send_telegram(chat_id, f"<b>Bot Status:</b> {status}\n<b>Location:</b> {loc_str}\n<b>Radius:</b> 50 km")
         except Exception:
             pass
         time.sleep(3)
@@ -395,6 +395,13 @@ while True:
             currently_in_range = set()
             
             for p in bd_planes:
+        dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
+        
+        # এখানে অল্টিটিউড চেক (কমপক্ষে ৫৫০ ফুট) এবং রেডিয়াস চেক একসাথে বসিয়ে দিন
+        if dist <= RADIUS_KM and p["alt"] >= 550:
+            currently_in_range.add(p["icao"])
+            
+            p in bd_planes:
                 dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
                 if dist <= RADIUS_KM:
                     currently_in_range.add(p["icao"])
