@@ -396,8 +396,6 @@ while True:
             
             for p in bd_planes:
         dist = haversine(u_lat, u_lon, p["lat"], p["lon"])
-        
-        # এখানে অল্টিটিউড চেক (কমপক্ষে ৫৫০ ফুট) এবং রেডিয়াস চেক একসাথে বসিয়ে দিন
         if dist <= RADIUS_KM and p["alt"] >= 550:
             currently_in_range.add(p["icao"])
             
@@ -407,7 +405,7 @@ while True:
                     currently_in_range.add(p["icao"])
                     if p["icao"] not in alerted:
                         msg = (
-                            f"🛩️🟢 <b>New Flight Detected!</b>\n\n"
+                            f"✈️🟢 <b>New Flight Detected!</b>\n\n"
                             f"Airline: <b>{p['airline']}</b>\n"
                             f"Aircraft: <b>{p['aircraft']}</b>\n"
                             f"Reg: <b>{p['reg']}</b>\n"
