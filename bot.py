@@ -298,7 +298,7 @@ def send_telegram(chat_id, text):
         "parse_mode": "HTML",
         "reply_markup": json.loads(get_keyboard())
     }).encode('utf-8')
-    req = urllib.request.Request(url, d=payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             pass
